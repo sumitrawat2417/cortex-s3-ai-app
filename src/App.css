@@ -686,3 +686,82 @@ body {
   border-color: var(--accent);
   background: var(--bg-card-hover);
 }
+
+/* Remote Smartwatch Controller Panel */
+.remote-control-panel {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 14px;
+  padding: 1.1rem;
+  margin-top: 1rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.remote-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.remote-title {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #38bdf8;
+  font-size: 0.95rem;
+}
+
+.remote-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.app-pills-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.app-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  padding: 0.45rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.app-pill:hover:not(:disabled) {
+  background: #38bdf8;
+  color: #0f172a;
+  border-color: #38bdf8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.35);
+}
+
+.app-pill:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.type-control .type-badge {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.type-control .answer-bubble {
+  border-left-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.05);
+}

@@ -5,7 +5,7 @@ import {
   Send, HelpCircle, ArrowRight, RotateCw, Eye
 } from 'lucide-react';
 import { SERVICE_UUID, CHAR_STREAM_UUID, CHAR_CMD_UUID, pcmToWavBlob, blobToBase64 } from './utils/ble';
-import { transcribeWithGroq, askGroqLLM, askGroqVision } from './utils/groq';
+import { transcribeWithGroq, askGroqLLM, askGroqVision, classifyCommandWithLLM } from './utils/groq';
 import './App.css';
 
 const DEFAULT_GROQ_KEY = '';
@@ -166,9 +166,9 @@ export default function App() {
 
     const flag = value.getUint8(0);
 
-    // --- AUDIO PROTOCOL (0x01, 0x02, 0x03) ---
-    if (flag === 0x01) {
-      transferTypeRef.current = 'audio';
+    // --- AUDIO PROTOCOL (0x01: AI Voice, 0x05: Assistant Voice Control) ---
+    if (flag === 0x01 || flag === 0x05) {
+      transferTypeRef.current = (flag === 0x05) ? 'control_audio' : 'audio';
       streamChunksRef.current = [];
       expectedBytesRef.current = value.getUint32(1, true);
       sampleRateRef.current = value.getUint16(5, true) || 8000;
@@ -176,9 +176,11 @@ export default function App() {
 
       setAppState('ble_transfer');
       setBleProgress(0);
-      setStatusText('Receiving voice audio over BLE...');
+      setStatusText(flag === 0x05
+        ? '🎙️ Assistant Control: Receiving voice command...'
+        : 'Receiving voice audio over BLE...');
     } 
-    else if (flag === 0x02 && transferTypeRef.current === 'audio') {
+    else if (flag === 0x02 && (transferTypeRef.current === 'audio' || transferTypeRef.current === 'control_audio')) {
       const chunk = new Uint8Array(value.buffer, value.byteOffset + 1, value.byteLength - 1);
       streamChunksRef.current.push(chunk);
 
@@ -187,9 +189,13 @@ export default function App() {
         setBleProgress(Math.min(100, Math.round((currentBytes / expectedBytesRef.current) * 100)));
       }
     } 
-    else if (flag === 0x03 && transferTypeRef.current === 'audio') {
+    else if (flag === 0x03 && (transferTypeRef.current === 'audio' || transferTypeRef.current === 'control_audio')) {
       const bleMs = Math.round(performance.now() - transferStartRef.current);
-      finishAudioTransfer(bleMs);
+      if (transferTypeRef.current === 'control_audio') {
+        finishControlAudioTransfer(bleMs);
+      } else {
+        finishAudioTransfer(bleMs);
+      }
     }
 
     // --- IMAGE PROTOCOL (0x11: Photo Only, 0x15: Look & Ask Photo + Voice to Follow) ---
@@ -567,6 +573,241 @@ export default function App() {
   }
 
   // -----------------------------------------------------------
+  // Smartwatch Command Intent Resolver
+  // -----------------------------------------------------------
+  function resolveSmartwatchCommand(text) {
+    if (!text) return null;
+    const t = text.toLowerCase().trim();
+
+    // Settings
+    if (t.includes('setting') || t.includes('preference') || t.includes('option') || t.includes('config')) {
+      return { type: 'OPEN', tag: 'SETTINGS', label: 'Opening Settings' };
+    }
+    // Calculator
+    if (t.includes('calc') || t.includes('math') || t.includes('sum') || t.includes('calculate')) {
+      return { type: 'OPEN', tag: 'CALC', label: 'Opening Calculator' };
+    }
+    // Music
+    if (t.includes('music') || t.includes('song') || t.includes('track') || t.includes('player') || t.includes('spotify') || t.includes('tune')) {
+      return { type: 'OPEN', tag: 'MUSIC', label: 'Opening Music' };
+    }
+    // QR Codes
+    if (t.includes('qr') || t.includes('barcode') || t.includes('code') || t.includes('pass')) {
+      return { type: 'OPEN', tag: 'MY_QRS', label: 'Opening QR Codes' };
+    }
+    // Flashlight / Torch
+    if (t.includes('flashlight') || t.includes('torch') || t.includes('light') || t.includes('lamp')) {
+      return { type: 'OPEN', tag: 'FLASHLIGHT', label: 'Opening Flashlight' };
+    }
+    // Clock / Alarm / Timer / Stopwatch
+    if (t.includes('clock') || t.includes('alarm') || t.includes('timer') || t.includes('stopwatch') || t.includes('time')) {
+      return { type: 'OPEN', tag: 'CLOCK', label: 'Opening Clock' };
+    }
+    // Calendar
+    if (t.includes('calendar') || t.includes('date') || t.includes('event') || t.includes('schedule') || t.includes('month')) {
+      return { type: 'OPEN', tag: 'CALENDAR', label: 'Opening Calendar' };
+    }
+    // Notifications
+    if (t.includes('notification') || t.includes('alert') || t.includes('message') || t.includes('notice')) {
+      return { type: 'OPEN', tag: 'NOTIFICATIONS', label: 'Opening Notifications' };
+    }
+    // AI Assistant (full Q&A / Vision)
+    if (t.includes('assistant') || t.includes('ai') || t.includes('vision') || t.includes('ask ai') || t.includes('chat')) {
+      return { type: 'OPEN', tag: 'AI_ASSISTANT', label: 'Opening AI Assistant' };
+    }
+    // Health / Steps
+    if (t.includes('health') || t.includes('step') || t.includes('walk') || t.includes('fitness') || t.includes('activity')) {
+      return { type: 'OPEN', tag: 'HEALTH', label: 'Opening Health' };
+    }
+    // Brightness
+    if (t.includes('bright') || t.includes('dim') || t.includes('screen brightness')) {
+      return { type: 'OPEN', tag: 'BRIGHTNESS', label: 'Opening Brightness' };
+    }
+    // Focus Mode
+    if (t.includes('focus') || t.includes('pomodoro') || t.includes('study')) {
+      return { type: 'OPEN', tag: 'FOCUS', label: 'Opening Focus Mode' };
+    }
+    // Menu / All Apps
+    if (t.includes('menu') || t.includes('apps') || t.includes('launcher') || t.includes('drawer')) {
+      return { type: 'OPEN', tag: 'MENU', label: 'Opening App Menu' };
+    }
+    // Watchface / Home
+    if (t.includes('home') || t.includes('watchface') || t.includes('main') || t.includes('exit')) {
+      return { type: 'OPEN', tag: 'WATCHFACE', label: 'Going to Home Screen' };
+    }
+    // About
+    if (t.includes('about') || t.includes('system info') || t.includes('device') || t.includes('version')) {
+      return { type: 'OPEN', tag: 'ABOUT', label: 'Opening About Watch' };
+    }
+    // Vault
+    if (t.includes('vault') || t.includes('password') || t.includes('secret')) {
+      return { type: 'OPEN', tag: 'VAULT', label: 'Opening Vault' };
+    }
+    // Macro
+    if (t.includes('macro') || t.includes('shortcut')) {
+      return { type: 'OPEN', tag: 'MACRO', label: 'Opening Macro' };
+    }
+    // Actions
+    if (t === 'play' || t === 'pause' || t.includes('play pause') || t.includes('resume') || t.includes('toggle music')) {
+      return { type: 'ACT', tag: 'PLAY_PAUSE', label: 'Toggling Music' };
+    }
+    if (t.includes('next') || t.includes('skip')) {
+      return { type: 'ACT', tag: 'NEXT_TRACK', label: 'Next Track' };
+    }
+    if (t.includes('prev') || t.includes('previous') || t.includes('back track')) {
+      return { type: 'ACT', tag: 'PREV_TRACK', label: 'Previous Track' };
+    }
+    if (t.includes('louder') || t.includes('volume up') || t.includes('turn up')) {
+      return { type: 'ACT', tag: 'VOL_UP', label: 'Volume Up' };
+    }
+    if (t.includes('quieter') || t.includes('volume down') || t.includes('turn down')) {
+      return { type: 'ACT', tag: 'VOL_DOWN', label: 'Volume Down' };
+    }
+
+    return null;
+  }
+
+  // -----------------------------------------------------------
+  // Finish Assistant Voice Control Transfer
+  // -----------------------------------------------------------
+  async function finishControlAudioTransfer(bleTransferMs) {
+    const totalBytes = streamChunksRef.current.reduce((acc, c) => acc + c.length, 0);
+    if (totalBytes === 0) {
+      setAppState('idle');
+      setStatusText('No audio bytes received for command.');
+      return;
+    }
+
+    const pcmBytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of streamChunksRef.current) {
+      pcmBytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const wavBlob = pcmToWavBlob(pcmBytes.buffer, sampleRateRef.current);
+    const audioUrl = URL.createObjectURL(wavBlob);
+    setActiveAudioUrl(audioUrl);
+
+    setAppState('transcribing');
+    setStatusText('🎙️ Transcribing voice command with Whisper...');
+
+    try {
+      const promptGuide = "Smartwatch voice command: open settings, start music, calculator, qrs, clock, flashlight, calendar, timer, alarm, stop, play, pause, next track, brightness, health, notifications, menu, watchface.";
+      const { text: rawSpoken, sttMs } = await transcribeWithGroq(wavBlob, apiKey, promptGuide);
+      const spokenText = rawSpoken.trim();
+
+      if (!spokenText || (spokenText.toLowerCase().includes('thank you') && totalBytes < 8000)) {
+        setAppState('idle');
+        setStatusText("No clear command heard. Speak clearly (e.g. 'Open Settings', 'Start Music')");
+        if (cmdCharRef.current) {
+          const encoder = new TextEncoder();
+          await cmdCharRef.current.writeValue(encoder.encode("CMD:ERROR:No speech heard"));
+        }
+        return;
+      }
+
+      setAppState('thinking');
+      setStatusText(`⚡ Interpreting command: "${spokenText}"...`);
+
+      // 1. First attempt fast local keyword matching (<1ms)
+      let cmdResult = resolveSmartwatchCommand(spokenText);
+
+      // 2. If unclassified, use fast Groq Llama 3.1 fallback (~200ms)
+      let llmMs = 0;
+      if (!cmdResult) {
+        const t0 = performance.now();
+        const tag = await classifyCommandWithLLM(spokenText, apiKey);
+        llmMs = Math.round(performance.now() - t0);
+        if (tag && tag.includes(':')) {
+          const [type, t] = tag.split(':');
+          cmdResult = { type, tag: t, label: (type === 'OPEN' ? `Opening ${t}` : `Action ${t}`) };
+        }
+      }
+
+      const totalMs = bleTransferMs + sttMs + llmMs;
+
+      if (cmdResult && cmdCharRef.current) {
+        // Send command to watch display & OS router
+        const blePayload = `CMD:${cmdResult.type}:${cmdResult.tag}:${cmdResult.label}`;
+        const encoder = new TextEncoder();
+        await cmdCharRef.current.writeValue(encoder.encode(blePayload));
+
+        // Add to history feed
+        setChatHistory(prev => [
+          {
+            id: Date.now(),
+            type: 'control',
+            isControl: true,
+            question: spokenText,
+            answer: `⚡ Command Executed: ${cmdResult.label} (${cmdResult.tag})`,
+            audioUrl,
+            timing: { bleMs: bleTransferMs, sttMs, llmMs, totalMs },
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          },
+          ...prev
+        ]);
+
+        setStatusText(`✅ Executed on Watch: ${cmdResult.label}`);
+        setAppState('answered');
+
+        if (ttsEnabled) {
+          speakTTS(cmdResult.label);
+        }
+      } else {
+        // Unrecognized
+        if (cmdCharRef.current) {
+          const encoder = new TextEncoder();
+          await cmdCharRef.current.writeValue(encoder.encode(`CMD:ERROR:Unknown: "${spokenText}"`));
+        }
+
+        setChatHistory(prev => [
+          {
+            id: Date.now(),
+            type: 'control',
+            isControl: true,
+            question: spokenText,
+            answer: `⚠️ Unrecognized command: "${spokenText}". Try 'Open Settings', 'Start Music', or 'Calculator'.`,
+            audioUrl,
+            timing: { bleMs: bleTransferMs, sttMs, llmMs, totalMs },
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          },
+          ...prev
+        ]);
+
+        setStatusText(`⚠️ Command not recognized: "${spokenText}"`);
+        setAppState('idle');
+      }
+    } catch (err) {
+      console.error("Assistant control error:", err);
+      setStatusText(`❌ Voice Control Error: ${err.message}`);
+      if (cmdCharRef.current) {
+        try {
+          const encoder = new TextEncoder();
+          await cmdCharRef.current.writeValue(encoder.encode("CMD:ERROR:Failed:" + err.message));
+        } catch (e) {}
+      }
+      setAppState('idle');
+    }
+  }
+
+  async function sendRemoteWatchCommand(type, tag, label) {
+    if (!cmdCharRef.current || !isConnected) {
+      alert("Watch is not connected via BLE!");
+      return;
+    }
+    try {
+      const blePayload = `CMD:${type}:${tag}:${label}`;
+      const encoder = new TextEncoder();
+      await cmdCharRef.current.writeValue(encoder.encode(blePayload));
+      setStatusText(`⚡ Remote Command Sent: ${label}`);
+    } catch (e) {
+      console.error("Failed to send remote command:", e);
+      setStatusText(`❌ Failed to send command: ${e.message}`);
+    }
+  }
+
+  // -----------------------------------------------------------
   // Action Triggers to Watch
   // -----------------------------------------------------------
   async function triggerLookAndAsk() {
@@ -808,6 +1049,48 @@ export default function App() {
         </button>
       </div>
 
+      {/* Smartwatch Voice & App Remote Controller */}
+      <div className="remote-control-panel">
+        <div className="remote-panel-header">
+          <span className="remote-title">
+            <Zap size={16} /> Assistant Smartwatch Controller
+          </span>
+          <span className="remote-sub">Voice Control or 1-Click Launch on Watch</span>
+        </div>
+        <div className="app-pills-grid">
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'SETTINGS', 'Opening Settings')} disabled={!isConnected}>
+            ⚙️ Settings
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'CALC', 'Opening Calculator')} disabled={!isConnected}>
+            🧮 Calculator
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'MUSIC', 'Opening Music')} disabled={!isConnected}>
+            🎵 Music
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'MY_QRS', 'Opening QR Codes')} disabled={!isConnected}>
+            📱 My QRs
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'AI_ASSISTANT', 'Opening AI Assistant')} disabled={!isConnected}>
+            🤖 AI Assistant
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'CLOCK', 'Opening Clock')} disabled={!isConnected}>
+            ⏰ Clock
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'FLASHLIGHT', 'Opening Flashlight')} disabled={!isConnected}>
+            🔦 Flashlight
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'CALENDAR', 'Opening Calendar')} disabled={!isConnected}>
+            📅 Calendar
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'NOTIFICATIONS', 'Opening Notifications')} disabled={!isConnected}>
+            🔔 Notifications
+          </button>
+          <button className="app-pill" onClick={() => sendRemoteWatchCommand('OPEN', 'WATCHFACE', 'Going to Watchface')} disabled={!isConnected}>
+            🏠 Watchface
+          </button>
+        </div>
+      </div>
+
       {/* Photo Viewport with Review & Decision Bar */}
       {activePhotoUrl && (
         <div className="photo-viewport-card">
@@ -896,6 +1179,7 @@ export default function App() {
                     {item.type === 'voice' && <span>🎙️ Voice Question</span>}
                     {item.type === 'vision' && <span>📸 Camera Vision AI</span>}
                     {item.type === 'look_and_ask' && <span>👁️🎙️ Look &amp; Ask Multimodal AI</span>}
+                    {item.type === 'control' && <span>⚡ Smartwatch Voice Command</span>}
                   </div>
                   <span className="timestamp">{item.timestamp}</span>
                 </div>
@@ -920,7 +1204,7 @@ export default function App() {
                   <div className="answer-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                       <Sparkles size={14} className="sparkle-icon" />
-                      <strong>Groq AI:</strong>
+                      <strong>{item.isControl ? 'Smartwatch Action:' : 'Groq AI:'}</strong>
                     </div>
                     <button 
                       className="btn-speak-inline" 
