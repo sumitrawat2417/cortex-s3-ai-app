@@ -637,8 +637,15 @@ export default function App() {
             </button>
           )}
 
-          <button className="btn-icon" onClick={() => setShowSettings(!showSettings)} title="API Settings">
+          <button className={`btn-icon ${!apiKey ? 'btn-warn-glow' : ''}`} onClick={() => setShowSettings(!showSettings)} title="API Settings" style={{ position: 'relative' }}>
             <Settings size={18} />
+            {!apiKey && (
+              <span style={{
+                position: 'absolute', top: '-4px', right: '-4px',
+                width: '10px', height: '10px', borderRadius: '50%',
+                background: '#ef4444', border: '2px solid #0f172a'
+              }} />
+            )}
           </button>
         </div>
       </header>
@@ -651,14 +658,20 @@ export default function App() {
             <span className="badge-shield"><ShieldCheck size={14} /> Direct Browser to Groq</span>
           </div>
           <div className="field-group">
-            <label>Groq API Key</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ margin: 0 }}>Groq API Key</label>
+              <span style={{ fontSize: '0.75rem', color: apiKey ? '#10b981' : '#f59e0b' }}>
+                {apiKey ? '● Key Saved' : '● No Key Set'}
+              </span>
+            </div>
             <input 
               type="password" 
               value={apiKey} 
-              onChange={e => setApiKey(e.target.value)} 
+              onChange={e => setApiKey(e.target.value.trim())} 
               placeholder="gsk_..."
+              style={{ marginTop: '0.4rem' }}
             />
-            <p className="field-hint">Supports Whisper Large V3, GPT-OSS 20B, and Qwen 27B Vision.</p>
+            <p className="field-hint">Paste your Groq API key (starts with <code>gsk_...</code>). Stored locally in your browser.</p>
           </div>
 
           <div className="field-group">

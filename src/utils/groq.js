@@ -6,6 +6,11 @@
  * Transcribe spoken audio using Groq Whisper Large V3 Turbo
  */
 export async function transcribeWithGroq(wavBlob, apiKey) {
+  const cleanKey = (apiKey || '').trim();
+  if (!cleanKey) {
+    throw new Error('Groq API Key is missing! Click ⚙️ Settings in the top-right and paste your Groq key.');
+  }
+
   const t0 = performance.now();
   const formData = new FormData();
   formData.append('model', 'whisper-large-v3-turbo');
@@ -14,7 +19,7 @@ export async function transcribeWithGroq(wavBlob, apiKey) {
   const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`
+      'Authorization': `Bearer ${cleanKey}`
     },
     body: formData
   });
@@ -36,11 +41,16 @@ export async function transcribeWithGroq(wavBlob, apiKey) {
  * Text Question Answering via Groq LLM (openai/gpt-oss-20b)
  */
 export async function askGroqLLM(question, apiKey) {
+  const cleanKey = (apiKey || '').trim();
+  if (!cleanKey) {
+    throw new Error('Groq API Key is missing! Click ⚙️ Settings in the top-right and paste your Groq key.');
+  }
+
   const t0 = performance.now();
   const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${cleanKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -84,6 +94,11 @@ export async function askGroqLLM(question, apiKey) {
  * Vision AI: Read text & understand images via Groq (qwen/qwen3.8-27b)
  */
 export async function askGroqVision(base64Image, customPrompt, apiKey) {
+  const cleanKey = (apiKey || '').trim();
+  if (!cleanKey) {
+    throw new Error('Groq API Key is missing! Click ⚙️ Settings in the top-right and paste your Groq key.');
+  }
+
   const t0 = performance.now();
   const prompt = customPrompt && customPrompt.trim().length > 0
     ? customPrompt.trim()
@@ -92,7 +107,7 @@ export async function askGroqVision(base64Image, customPrompt, apiKey) {
   const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${cleanKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
