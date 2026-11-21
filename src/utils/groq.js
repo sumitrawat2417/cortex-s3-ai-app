@@ -5,7 +5,7 @@
 /**
  * Transcribe spoken audio using Groq Whisper Large V3 Turbo
  */
-export async function transcribeWithGroq(wavBlob, apiKey, prompt) {
+export async function transcribeWithGroq(wavBlob, apiKey) {
   const cleanKey = (apiKey || '').trim();
   if (!cleanKey) {
     throw new Error('Groq API Key is missing! Click ⚙️ Settings in the top-right and paste your Groq key.');
@@ -15,9 +15,6 @@ export async function transcribeWithGroq(wavBlob, apiKey, prompt) {
   const formData = new FormData();
   formData.append('model', 'whisper-large-v3-turbo');
   formData.append('file', wavBlob, 'audio.wav');
-  if (prompt) {
-    formData.append('prompt', prompt);
-  }
 
   const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',
@@ -38,70 +35,6 @@ export async function transcribeWithGroq(wavBlob, apiKey, prompt) {
     text: data.text?.trim() || '',
     sttMs
   };
-}
-
-/**
- * Classify complex or natural language commands into a watch command tag via Llama-3.1-8B
- */
-export async function classifyCommandWithLLM(utterance, apiKey) {
-  const cleanKey = (apiKey || '').trim();
-  if (!cleanKey) return null;
-
-  try {
-    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${cleanKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        temperature: 0.1,
-        max_tokens: 30,
-        messages: [
-          {
-            role: 'system',
-            content: `Classify the user utterance into exactly ONE command tag:
-OPEN:SETTINGS
-OPEN:CALC
-OPEN:MUSIC
-OPEN:MY_QRS
-OPEN:AI_ASSISTANT
-OPEN:CLOCK
-OPEN:CALENDAR
-OPEN:FLASHLIGHT
-OPEN:NOTIFICATIONS
-OPEN:WATCHFACE
-OPEN:MENU
-OPEN:HEALTH
-OPEN:BRIGHTNESS
-OPEN:FOCUS
-OPEN:ABOUT
-OPEN:VAULT
-OPEN:MACRO
-ACT:PLAY_PAUSE
-ACT:NEXT_TRACK
-ACT:PREV_TRACK
-ACT:VOL_UP
-ACT:VOL_DOWN
-
-Reply ONLY with the tag (e.g. OPEN:SETTINGS). If unknown, reply UNKNOWN.`
-          },
-          {
-            role: 'user',
-            content: utterance
-          }
-        ]
-      })
-    });
-
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const tag = data.choices?.[0]?.message?.content?.trim();
-    return tag && tag !== 'UNKNOWN' ? tag : null;
-  } catch (e) {
-    return null;
-  }
 }
 
 /**
