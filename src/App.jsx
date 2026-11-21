@@ -71,7 +71,7 @@ export default function App() {
   // Transfer & Feed
   const [bleProgress, setBleProgress] = useState(0);
   const [chatHistory, setChatHistory] = useState([]);
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('groq_api_key') || DEFAULT_GROQ_KEY);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('groq_api_key') || import.meta.env.VITE_GROQ_API_KEY || DEFAULT_GROQ_KEY);
   const [showSettings, setShowSettings] = useState(false);
 
   // BLE & Look-and-Ask References
