@@ -495,8 +495,16 @@ export default function App() {
     }
 
     try {
-      // 1. Clean markdown and intro filler for clean display on watch
-      let clean = text.replace(/[*#_`]/g, '').replace(/\n+/g, ' ').trim();
+      // 1. Normalize Unicode punctuation to standard ASCII equivalents so watch TFT font renders cleanly
+      let clean = text
+        .replace(/[\u2018\u2019\u201A\u201B\u00B4`]/g, "'") // Single smart quotes & acute -> ASCII apostrophe
+        .replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"') // Double smart quotes -> ASCII quote
+        .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-') // Hyphens, en-dash, em-dash, minus -> ASCII hyphen
+        .replace(/\u2026/g, '...') // Ellipsis -> three dots
+        .replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, '- ') // Bullets -> ASCII hyphen list
+        .replace(/[*#_`~]/g, '') // Strip markdown formatting
+        .replace(/\n+/g, ' ') // Collapse newlines
+        .trim();
       clean = clean.replace(/^(based on (the )?visible text[^:]*:|here is (the )?[^:]*:)/i, '').trim();
       const snippet = clean.substring(0, 320); // Up to 320 characters
       const encoder = new TextEncoder();
