@@ -115,20 +115,20 @@ export async function askGroqVision(base64Image, customPrompt, apiKey) {
       messages: [
         {
           role: 'system',
-          content: 'You are an AI smartwatch assistant with a small watch screen. Answer directly, concisely, and immediately in 1-2 punchy sentences. Do not use filler or preamble like "Based on the image...". Give the extracted text or answer immediately.'
+          content: 'You are an AI smartwatch assistant. Inspect the attached image carefully and answer the user question directly in 1-2 punchy sentences. State what is visible in the image. Do not use filler preamble like "Based on the image...".'
         },
         {
           role: 'user',
           content: [
             {
-              type: 'text',
-              text: prompt
-            },
-            {
               type: 'image_url',
               image_url: {
                 url: `data:image/jpeg;base64,${base64Image}`
               }
+            },
+            {
+              type: 'text',
+              text: prompt
             }
           ]
         }

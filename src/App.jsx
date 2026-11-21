@@ -402,23 +402,33 @@ export default function App() {
       const { text: rawQuestion, sttMs } = await transcribeWithGroq(wavBlob, apiKey);
       const question = rawQuestion.trim();
 
-      // Check if this audio belongs to a Look & Ask multimodal query!
-      if (isLookAndAskRef.current && pendingPhotoRef.current) {
-        const photoInfo = pendingPhotoRef.current;
+      // Check if this audio belongs to a Look & Ask multimodal query OR references an active photo!
+      const photoToUse = pendingPhotoRef.current || (activePhotoBlob ? {
+        blob: activePhotoBlob,
+        url: activePhotoUrl,
+        meta: photoMeta,
+        bleMs: 0
+      } : null);
+
+      const isVisionQuery = isLookAndAskRef.current || (photoToUse && (
+        /image|photo|picture|look|see|object|this|read|what is (this|that)|flower|plant/i.test(question) || !question
+      ));
+
+      if (photoToUse && isVisionQuery) {
         const promptToSend = (question && question.length > 0 && !question.toLowerCase().includes('thank you'))
           ? question
-          : 'Read and extract all visible text from this image, then explain or answer clearly.';
+          : 'Inspect this image carefully. What is this object? Explain concisely in 1-2 sentences.';
 
         setAppState('thinking');
         setStatusText(`👁️🎙️ Groq Vision answering: "${promptToSend}"...`);
 
-        const base64Image = await blobToBase64(photoInfo.blob);
+        const base64Image = await blobToBase64(photoToUse.blob);
         const { answer, visionMs } = await askGroqVision(base64Image, promptToSend, apiKey);
 
         // Send answer to watch ST7789 display
         await sendAnswerToWatch(answer);
 
-        const totalMs = photoInfo.bleMs + bleTransferMs + sttMs + visionMs;
+        const totalMs = photoToUse.bleMs + bleTransferMs + sttMs + visionMs;
 
         setChatHistory(prev => [
           {
@@ -426,11 +436,11 @@ export default function App() {
             type: 'look_and_ask',
             question: promptToSend,
             answer,
-            imageUrl: photoInfo.url,
-            imageMeta: photoInfo.meta,
+            imageUrl: photoToUse.url,
+            imageMeta: photoToUse.meta,
             audioUrl,
             timing: {
-              blePhotoMs: photoInfo.bleMs,
+              blePhotoMs: photoToUse.bleMs,
               bleAudioMs: bleTransferMs,
               sttMs,
               visionMs,
@@ -445,7 +455,7 @@ export default function App() {
         isLookAndAskRef.current = false;
         pendingPhotoRef.current = null;
         setAppState('answered');
-        setStatusText('👁️🎙️ Look & Ask complete! Answer sent to watch & spoken aloud.');
+        setStatusText('👁️🎙️ Look & Ask complete! Answer sent to watch display.');
         return;
       }
 
